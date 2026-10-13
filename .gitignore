@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+
+# Media (never commit videos or results)
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.wav
+*.mp3
+*.flac
