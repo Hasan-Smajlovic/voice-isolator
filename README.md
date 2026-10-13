@@ -1,86 +1,64 @@
-# Očisti glas
+# Voice Isolator
 
-Besplatna skripta koja iz videa uklanja muziku i pozadinsku buku i ostavlja samo glas. Radi lokalno na tvom računaru, bez pretplate i bez uploada na tuđe servere.
+A free script that removes music and background noise from a video and keeps only the voice. It runs locally on your computer. No subscription, no uploads to other servers.
 
-*English below.*
+## How it works
 
-## Kako radi
+1. Extracts the audio from the video (ffmpeg).
+2. The **BS-Roformer** AI model separates the voice from the music.
+3. The **Mel-Roformer DeNoise** AI model removes the remaining noise from the voice.
+4. Normalizes loudness (loudnorm, -16 LUFS).
+5. Puts the clean voice back into the video **without re-encoding the picture**, so the video quality stays 100% the same.
 
-1. Izvuče zvuk iz videa (ffmpeg).
-2. AI model **BS-Roformer** odvoji glas od muzike.
-3. AI model **Mel-Roformer DeNoise** ukloni preostalu buku iz glasa.
-4. Izjednači glasnoću (loudnorm, -16 LUFS).
-5. Vrati čisti glas u video **bez ponovnog kodiranja slike**, tako da kvalitet slike ostaje 100% isti.
+On a test video (4 min, 1080p), the background in the pauses between words dropped from -25.7 dB to -63.9 dB, which is almost full silence.
 
-Na testnom videu (4 min, 1080p) pozadina u pauzama govora je spuštena sa -25.7 dB na -63.9 dB, tj. praktično tišina.
+## Installation
 
-## Instalacija
-
-Potreban je samo [uv](https://docs.astral.sh/uv/getting-started/installation/):
+You only need [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```bash
 winget install astral-sh.uv
 ```
 
-Sve ostalo (Python, PyTorch, ffmpeg, AI modeli) skripta sama skine pri prvom pokretanju. Prvo pokretanje traje duže jer se skida oko 4 GB.
+The script downloads everything else (Python, PyTorch, ffmpeg, AI models) on the first run. The first run takes longer because it downloads about 4 GB.
 
-## Upotreba
+## Usage
 
-**Windows, najlakše:** prevuci video na `ocisti_glas.bat`.
+**Windows, easiest way:** drag and drop a video onto `voice_isolator.bat`.
 
 **Terminal:**
 
 ```bash
-uv run --python 3.12 --script ocisti_glas.py "C:\put\do\videa.mp4"
+uv run --python 3.12 --script voice_isolator.py "path/to/video.mp4"
 ```
 
-Opcije:
+Options:
 
-| Opcija | Šta radi |
+| Option | What it does |
 |---|---|
-| `--bez-denoise` | Preskoči uklanjanje buke (brže, uklanja samo muziku) |
-| `--izlaz FOLDER` | Gdje da sačuva rezultate (default: pored videa) |
+| `--no-denoise` | Skip noise removal (faster, removes music only) |
+| `--output DIR` | Where to save the results (default: next to the video) |
 
-Rezultati:
+Results:
 
-| Fajl | Sadržaj |
+| File | Content |
 |---|---|
-| `<ime>_samo_glas.mp4` | Video sa čistim glasom |
-| `<ime>_samo_glas.wav` | Samo glas, bez kompresije |
-| `<ime>_samo_glas.mp3` | Samo glas, 320 kbps |
+| `<name>_voice_only.mp4` | Video with the clean voice |
+| `<name>_voice_only.wav` | Voice only, uncompressed |
+| `<name>_voice_only.mp3` | Voice only, 320 kbps |
 
-## Zahtjevi i brzina
+## Requirements and speed
 
-- Windows ili Linux. Preporučena NVIDIA grafička (CUDA). Radi i bez nje, ali dosta sporije.
-- Na RTX 3050 video od 4 minute traje oko 20 minuta. Ugasi igrice i druge programe koji koriste grafičku dok obrađuješ.
-- Upozorenje o `onnxruntime` / `cudart64_13.dll` u logu se može ignorisati, modeli rade preko PyTorch-a.
+- Windows or Linux. An NVIDIA GPU (CUDA) is recommended. It also works without one, but much slower.
+- On an RTX 3050, a 4-minute video takes about 20 minutes. Close games and other programs that use the GPU while processing.
+- You can ignore the `onnxruntime` / `cudart64_13.dll` warning in the log. The models run on PyTorch.
 
----
-
-## English
-
-A free script that removes music and background noise from a video and keeps only the voice. Runs locally, no subscription, no uploads.
-
-**Pipeline:** extract audio with ffmpeg, separate vocals with BS-Roformer, remove leftover noise with Mel-Roformer DeNoise, normalize loudness, then remux the clean voice into the video with the video stream copied (no re-encode, no quality loss).
-
-**Install:** just [uv](https://docs.astral.sh/uv/getting-started/installation/). Everything else is fetched on first run (~4 GB).
-
-**Run:**
-
-```bash
-uv run --python 3.12 --script ocisti_glas.py "path/to/video.mp4"
-```
-
-On Windows you can also drag a video onto `ocisti_glas.bat`. Flags: `--bez-denoise` (skip denoise, faster), `--izlaz DIR` (output folder). Outputs `<name>_samo_glas.mp4`, `.wav` and `.mp3` next to the video.
-
-**Requirements:** Windows or Linux, NVIDIA GPU recommended (CPU works but is much slower).
-
-## Zahvale / Credits
+## Credits
 
 - [python-audio-separator](https://github.com/nomadkaraoke/python-audio-separator) for running the models
 - BS-Roformer model by viperx, Mel-Roformer DeNoise model by aufr33. The models are downloaded from their original sources and keep their own licenses.
 - [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) for the bundled ffmpeg
 
-## Licenca / License
+## License
 
 [MIT](LICENSE)

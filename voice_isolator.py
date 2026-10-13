@@ -18,24 +18,24 @@
 # explicit = true
 # ///
 """
-Ocisti glas iz videa: uklanja muziku i pozadinsku buku, ostavlja samo glas.
+Voice isolator: removes music and background noise from a video and keeps only the voice.
 
-Koraci:
-  1. Izvuce zvuk iz videa (ffmpeg).
-  2. AI model (BS-Roformer) odvoji glas od muzike.
-  3. Drugi AI model (Mel-Roformer DeNoise) ukloni preostalu buku iz glasa.
-  4. Izjednaci glasnocu (loudnorm, -16 LUFS).
-  5. Vrati cisti glas u video BEZ ponovnog kodiranja slike (kvalitet slike ostaje 100% isti).
+Steps:
+  1. Extract the audio from the video (ffmpeg).
+  2. An AI model (BS-Roformer) separates the voice from the music.
+  3. A second AI model (Mel-Roformer DeNoise) removes the remaining noise from the voice.
+  4. Normalize loudness (loudnorm, -16 LUFS).
+  5. Put the clean voice back into the video WITHOUT re-encoding the picture (video quality stays 100% the same).
 
-Upotreba:
-  uv run ocisti_glas.py "C:\\putanja\\do\\videa.mp4"
-  uv run ocisti_glas.py video.mp4 --bez-denoise      (samo uklanjanje muzike)
-  uv run ocisti_glas.py video.mp4 --izlaz D:\\Rezultati
+Usage:
+  uv run voice_isolator.py "C:\\path\\to\\video.mp4"
+  uv run voice_isolator.py video.mp4 --no-denoise      (remove music only)
+  uv run voice_isolator.py video.mp4 --output D:\\Results
 
-Rezultati (pored videa ili u --izlaz folderu):
-  <ime>_samo_glas.mp4   video sa cistim glasom
-  <ime>_samo_glas.wav   samo glas, bez kompresije (najbolji kvalitet)
-  <ime>_samo_glas.mp3   samo glas, 320 kbps
+Results (next to the video, or in the --output folder):
+  <name>_voice_only.mp4   video with the clean voice
+  <name>_voice_only.wav   voice only, uncompressed (best quality)
+  <name>_voice_only.mp3   voice only, 320 kbps
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ import imageio_ffmpeg
 
 VOCAL_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
 DENOISE_MODEL = "denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt"
-MODEL_DIR = Path.home() / ".cache" / "ocisti_glas_modeli"
+MODEL_DIR = Path.home() / ".cache" / "voice_isolator_models"
 
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 
@@ -91,48 +91,48 @@ def separate(audio: Path, model: str, keep_stem: str, out_dir: Path) -> Path:
     outputs = separator.separate(str(audio))
     wanted = [name for name in outputs if f"({keep_stem.lower()})" in name.lower()]
     if not wanted:
-        raise RuntimeError(f"Model {model} nije vratio '{keep_stem}' stem, dobio: {outputs}")
+        raise RuntimeError(f"Model {model} did not return the '{keep_stem}' stem, got: {outputs}")
     return out_dir / Path(wanted[0]).name
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Ukloni muziku i buku iz videa, ostavi samo glas.")
-    parser.add_argument("video", type=Path, help="Putanja do videa (mp4, mov, mkv...)")
-    parser.add_argument("--izlaz", type=Path, help="Folder za rezultate (default: pored videa)")
-    parser.add_argument("--bez-denoise", action="store_true", help="Preskoci drugi korak (uklanjanje buke)")
+    parser = argparse.ArgumentParser(description="Remove music and noise from a video, keep only the voice.")
+    parser.add_argument("video", type=Path, help="Path to the video (mp4, mov, mkv...)")
+    parser.add_argument("--output", type=Path, help="Folder for the results (default: next to the video)")
+    parser.add_argument("--no-denoise", action="store_true", help="Skip the second step (noise removal)")
     args = parser.parse_args()
 
     video: Path = args.video.resolve()
     if not video.is_file():
-        print(f"Video ne postoji: {video}", file=sys.stderr)
+        print(f"Video not found: {video}", file=sys.stderr)
         return 1
 
-    out_dir = (args.izlaz or video.parent).resolve()
+    out_dir = (args.output or video.parent).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = video.stem
-    out_video = out_dir / f"{stem}_samo_glas{video.suffix}"
-    out_wav = out_dir / f"{stem}_samo_glas.wav"
-    out_mp3 = out_dir / f"{stem}_samo_glas.mp3"
+    out_video = out_dir / f"{stem}_voice_only{video.suffix}"
+    out_wav = out_dir / f"{stem}_voice_only.wav"
+    out_mp3 = out_dir / f"{stem}_voice_only.mp3"
 
     expose_ffmpeg_on_path()
     start = time.time()
-    with tempfile.TemporaryDirectory(prefix="ocisti_glas_") as tmp_str:
+    with tempfile.TemporaryDirectory(prefix="voice_isolator_") as tmp_str:
         tmp = Path(tmp_str)
 
-        print("[1/5] Izvlacim zvuk iz videa...")
+        print("[1/5] Extracting audio from the video...")
         original = tmp / "original.wav"
         ffmpeg("-i", str(video), "-vn", "-ac", "2", "-ar", "44100", "-c:a", "pcm_s16le", str(original))
 
-        print("[2/5] Odvajam glas od muzike (BS-Roformer)...")
+        print("[2/5] Separating voice from music (BS-Roformer)...")
         voice = separate(original, VOCAL_MODEL, "Vocals", tmp)
 
-        if args.bez_denoise:
-            print("[3/5] Preskacem uklanjanje buke (--bez-denoise).")
+        if args.no_denoise:
+            print("[3/5] Skipping noise removal (--no-denoise).")
         else:
-            print("[3/5] Uklanjam preostalu buku iz glasa (Mel-Roformer DeNoise)...")
+            print("[3/5] Removing remaining noise from the voice (Mel-Roformer DeNoise)...")
             voice = separate(voice, DENOISE_MODEL, "dry", tmp)
 
-        print("[4/5] Izjednacavam glasnocu...")
+        print("[4/5] Normalizing loudness...")
         ffmpeg(
             "-i", str(voice),
             "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
@@ -141,7 +141,7 @@ def main() -> int:
         )
         ffmpeg("-i", str(out_wav), "-c:a", "libmp3lame", "-b:a", "320k", str(out_mp3))
 
-        print("[5/5] Vracam cisti glas u video (slika se ne dira)...")
+        print("[5/5] Putting the clean voice back into the video (picture is not re-encoded)...")
         ffmpeg(
             "-i", str(video), "-i", str(out_wav),
             "-map", "0:v:0", "-map", "1:a:0",
@@ -151,7 +151,7 @@ def main() -> int:
         )
 
     minutes, seconds = divmod(int(time.time() - start), 60)
-    print(f"\nGotovo za {minutes}m {seconds}s. Rezultati:")
+    print(f"\nDone in {minutes}m {seconds}s. Results:")
     for path in (out_video, out_wav, out_mp3):
         print(f"  {path}")
     return 0
